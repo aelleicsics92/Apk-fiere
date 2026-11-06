@@ -89,7 +89,7 @@ td.r,th.r{text-align:right}
 </head>
 <body>
 <header>
-  <h1>Vendite Fiere</h1>
+  <h1 style="display:flex;justify-content:space-between">Vendite Fiere<span id="syncSt" style="font-size:.8rem;font-weight:600;opacity:.9"></span></h1>
   <div class="tabs">
     <button class="tab on" data-tab="vendite">Vendite</button>
     <button class="tab" data-tab="resoconto">Resoconto</button>
@@ -98,7 +98,7 @@ td.r,th.r{text-align:right}
 </header>
 
 <div class="view" id="vendite">
-  <input type="text" id="fQ" placeholder="🔍 Cerca codice o nome" onfocus="this.select()">
+  <input type="text" id="fQ" placeholder="🔍 Cerca codice o nome">
   <div class="chips" id="chips">
     <button class="chip" data-f="oggi">Oggi</button>
     <button class="chip" data-f="Contanti">Contanti</button>
@@ -131,6 +131,14 @@ td.r,th.r{text-align:right}
   <div class="inv"><h3>COMPRAVENDITA</h3><p id="iCompInfo"></p><button class="btn p" style="width:100%" data-imp="comp">Aggiorna da PDF</button></div>
   <div class="inv"><h3>CONTOVENDITA</h3><p id="iContoInfo"></p><button class="btn p" style="width:100%" data-imp="conto">Aggiorna da PDF</button></div>
   <div class="hint">L'aggiornamento aggiunge solo i codici nuovi: nulla viene cancellato e i doppioni vengono ignorati.</div>
+  <div class="inv" style="margin-top:14px"><h3>☁ Sincronizzazione</h3><p id="syncInfo">Non configurata</p>
+    <label>Codice configurazione (da un altro telefono)</label>
+    <div class="row"><input type="text" id="cfgCode" autocomplete="off" onfocus="this.select()"><button class="btn" id="cfgApply" style="flex:none">Applica</button></div>
+    <label>URL Supabase</label><input type="text" id="sUrl" autocomplete="off" onfocus="this.select()">
+    <label>Chiave anon</label><input type="text" id="sKey" autocomplete="off" onfocus="this.select()">
+    <label>Chiave app</label><input type="text" id="sApp" autocomplete="off" onfocus="this.select()">
+    <div class="row" style="margin-top:12px"><button class="btn p" id="sSave">Salva e sincronizza</button><button class="btn" id="sShare">Condividi codice</button></div>
+  </div>
   <input type="file" id="impFile" accept="application/pdf,.pdf" style="display:none">
 </div>
 
@@ -185,6 +193,7 @@ td.r,th.r{text-align:right}
 
 <script src="pdf.min.js"></script>
 <script src="jspdf.umd.min.js"></script>
+<script src="sync.js"></script>
 <script>
 (function(){
 const $=id=>document.getElementById(id);
@@ -202,10 +211,41 @@ const saleTot=s=>s.items.reduce((a,i)=>a+i.qty*i.price,0);
 let sales=[],inv={comp:{items:[],upd:null},conto:{items:[],upd:null}},maps={comp:{},conto:{}};
 const lsGet=k=>{try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}};
 const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+const S=Object.assign({url:'',key:'',app:'',lastSales:'1970-01-01T00:00:00Z',lastInv:'1970-01-01T00:00:00Z',dirty:{},invQ:[],invAll:false},lsGet('sync2')||{});
+const saveSync=()=>lsSet('sync2',S);
+async function http(method,url,headers,body){
+  const cp=P().CapacitorHttp;
+  if(cp&&cp.request){
+    const r=await cp.request({url,method,headers,data:body});
+    let j=r.data;const t=typeof j==='string'?j:JSON.stringify(j||'');
+    if(typeof j==='string'){try{j=JSON.parse(j)}catch(e){j=null}}
+    return {status:r.status,json:j,text:t};
+  }
+  const r=await fetch(url,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
+  const t=await r.text();let j=null;try{j=JSON.parse(t)}catch(e){}
+  return {status:r.status,json:j,text:t};
+}
+function setStatus(k,m){
+  const n=Object.keys(S.dirty).length+S.invQ.length;
+  const el=$('syncSt');if(!el)return;
+  if(!(S.url&&S.key&&S.app)){el.textContent='';return}
+  el.textContent=k==='busy'?'☁ …':k==='ok'?(n?'☁ '+n+' da inviare':'☁ ✓'):'☁ ⚠ offline'+(n?' ('+n+')':'');
+  const si=$('syncInfo');if(si)si.textContent=k==='ok'?'Sincronizzato alle '+new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):k==='err'?'Errore: '+(m||'rete'):'Sincronizzazione…';
+}
 let bt=null;
 function backup(){clearTimeout(bt);bt=setTimeout(()=>{const f=P().Filesystem;if(f)f.writeFile({path:'backup.json',data:JSON.stringify({sales,inv}),directory:'DATA',encoding:'utf8'}).catch(()=>{})},400)}
-const saveSales=()=>{lsSet('sales2',sales);backup()};
-const saveInv=()=>{lsSet('inv2',inv);rebuild();backup();renderInv()};
+const saveSales=()=>{lsSet('sales2',sales);backup();saveSync();schedSync()};
+const saveInv=()=>{lsSet('inv2',inv);rebuild();backup();renderInv();saveSync();schedSync()};
+const sync=FSync.create({
+  cfg:()=>(S.url&&S.key&&S.app)?{url:S.url,key:S.key,app:S.app}:null,
+  state:()=>S,persist:saveSync,getSales:()=>sales,setSales:a=>{sales=a},getInv:()=>inv,http,status:setStatus,
+  changed:()=>{lsSet('sales2',sales);lsSet('inv2',inv);rebuild();backup();render();renderInv()}
+});
+let st=null;
+function schedSync(){clearTimeout(st);st=setTimeout(()=>sync.run(),600)}
+setInterval(()=>{if(!document.hidden)sync.run()},20000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync.run()});
+window.addEventListener('online',()=>sync.run());
 function rebuild(){['comp','conto'].forEach(k=>{maps[k]={};inv[k].items.forEach(i=>{if(!maps[k][i.c])maps[k][i.c]=i})})}
 
 async function init(){
@@ -222,7 +262,8 @@ async function init(){
   if(!iv&&!inv.comp.items.length){
     try{const d=await (await fetch('inventory.json')).json();inv.comp={items:d,upd:new Date().toISOString()}}catch(e){}
   }
-  lsSet('sales2',sales);lsSet('inv2',inv);rebuild();render();renderInv();
+  sales.forEach(s=>{if(!s.u)s.u=Date.parse(s.ts)||Date.now()});
+  lsSet('sales2',sales);lsSet('inv2',inv);rebuild();render();renderInv();setStatus('ok');sync.run();
 }
 
 // toast / busy
@@ -249,6 +290,7 @@ document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
   else fPay=fPay===f?'':f;
   render();
 });
+$('fQ').onfocus=()=>{$('fQ').value='';render()};
 ['fFrom','fTo','fQ'].forEach(id=>$(id).oninput=()=>{if(id!=='fQ')fOggi=false;render()});
 $('fReset').onclick=()=>{$('fFrom').value=$('fTo').value=$('fQ').value='';fPay='';fOggi=false;render()};
 function filtered(){
@@ -301,7 +343,7 @@ $('impFile').onchange=async e=>{
     if(!parsed.length){toast('Nessun articolo trovato nel PDF')}
     else{
       const have=new Set(inv[sec].items.map(i=>i.c));let add=0,dup=0;
-      parsed.forEach(i=>{if(have.has(i.c))dup++;else{have.add(i.c);inv[sec].items.push(i);add++}});
+      parsed.forEach(i=>{if(have.has(i.c))dup++;else{have.add(i.c);inv[sec].items.push(i);S.invQ.push({sec,code:i.c,name:i.n,price:i.p});add++}});
       inv[sec].upd=new Date().toISOString();saveInv();
       toast(SEC[sec]+': '+add+' nuovi, '+dup+' doppioni ignorati');
     }
@@ -410,8 +452,10 @@ $('mAdd').onclick=addItem;
 function saveSale(){
   if(hasEntry()&&!addItem())return;
   if(!cart.length){toast('Aggiungi almeno un articolo');return}
-  if(editId){const s=sales.find(x=>x.id===editId);s.items=cart.map(i=>({...i}));s.pay=pay}
-  else sales.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),ts:new Date().toISOString(),pay,items:cart.map(i=>({...i}))});
+  let sid=editId;
+  if(editId){const s=sales.find(x=>x.id===editId);s.items=cart.map(i=>({...i}));s.pay=pay;s.u=Date.now()}
+  else{sid=Date.now().toString(36)+Math.random().toString(36).slice(2,6);sales.push({id:sid,ts:new Date().toISOString(),pay,items:cart.map(i=>({...i})),u:Date.now()})}
+  S.dirty[sid]={t:'u',u:sales.find(x=>x.id===sid).u};
   saveSales();vib([30,40,30]);closeForm();render();toast('Vendita salvata');
 }
 $('mSave').onclick=saveSale;
@@ -425,7 +469,7 @@ $('form').addEventListener('keydown',e=>{
   else if(id==='mPrice'){if(hasEntry())addItem();else saveSale()}
   else saveSale();
 });
-$('mDel').onclick=()=>{if(confirm('Eliminare la vendita?')){sales=sales.filter(x=>x.id!==editId);saveSales();closeForm();render()}};
+$('mDel').onclick=()=>{if(confirm('Eliminare la vendita?')){sales=sales.filter(x=>x.id!==editId);S.dirty[editId]={t:'d',u:Date.now()};saveSales();closeForm();render()}};
 $('mPdf').onclick=()=>{const s=sales.find(x=>x.id===editId);if(s)sharePdf('Vendita',[s],'vendita','Vendita del '+dt(s.ts))};
 
 // pdf
@@ -478,6 +522,25 @@ $('shAll').onclick=()=>{menu.classList.remove('on');const f=$('fFrom').value,t=$
 $('shEl').onclick=()=>{menu.classList.remove('on');sharePdf('Vendite POS e Bonifico',filtered().filter(s=>s.pay==='POS'||s.pay==='Bonifico'),'pos_bonifico','Solo POS e Bonifico (filtri attivi applicati)')};
 $('rShare').onclick=()=>{const d=$('rDay').value;sharePdf('Resoconto '+d,sales.filter(s=>ymd(s.ts)===d),'resoconto','Resoconto giornaliero del '+d)};
 
+function loadCfg(){$('sUrl').value=S.url;$('sKey').value=S.key;$('sApp').value=S.app}
+function applyCfg(u,k,a){
+  u=u.trim().replace(/\/+$/,'');k=k.trim();a=a.trim();
+  if(!u||!k||!a){toast('Compila tutti i campi');return}
+  if(u!==S.url||a!==S.app){S.lastSales=S.lastInv='1970-01-01T00:00:00Z';S.invAll=true;sales.forEach(x=>{S.dirty[x.id]={t:'u',u:x.u||Date.now()}})}
+  S.url=u;S.key=k;S.app=a;saveSync();loadCfg();toast('Sincronizzazione avviata');sync.run();
+}
+$('sSave').onclick=()=>applyCfg($('sUrl').value,$('sKey').value,$('sApp').value);
+$('cfgApply').onclick=()=>{
+  try{const o=JSON.parse(decodeURIComponent(escape(atob($('cfgCode').value.trim()))));applyCfg(o.u,o.k,o.a);$('cfgCode').value=''}
+  catch(e){toast('Codice non valido')}
+};
+$('sShare').onclick=async()=>{
+  if(!(S.url&&S.key&&S.app)){toast('Configura prima la sincronizzazione');return}
+  const code=btoa(unescape(encodeURIComponent(JSON.stringify({u:S.url,k:S.key,a:S.app}))));
+  const sh=P().Share;
+  try{if(sh)await sh.share({title:'Codice configurazione Vendite Fiere',text:code});else prompt('Codice',code)}catch(e){}
+};
+loadCfg();
 init();
 })();
 </script>
