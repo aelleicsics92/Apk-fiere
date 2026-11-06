@@ -18,7 +18,11 @@ jobs:
           distribution: temurin
           java-version: 17
       - run: npm install
-      - run: cp node_modules/jspdf/dist/jspdf.umd.min.js www/jspdf.umd.min.js
+      - run: |
+          cp node_modules/jspdf/dist/jspdf.umd.min.js www/
+          cp node_modules/pdfjs-dist/legacy/build/pdf.min.js www/
+          cp node_modules/pdfjs-dist/legacy/build/pdf.worker.min.js www/
+          mkdir -p ~/.android && cp keystore/debug.keystore ~/.android/debug.keystore
       - run: npx cap add android
       - run: npx cap sync android
       - name: Build debug APK
