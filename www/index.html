@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Vendite Fiere</title>
+<style>
+:root{--g:#065f46;--g2:#d1fae5;--bd:#e5e7eb;--tx:#374151;--mu:#6b7280}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:system-ui,Roboto,sans-serif;color:var(--tx);background:#f8fafc;padding-bottom:110px}
+header{background:var(--g);color:#fff;padding:calc(env(safe-area-inset-top) + 12px) 14px 0;position:sticky;top:0;z-index:5}
+header h1{font-size:1.1rem;margin:0 0 8px}
+.tabs{display:flex;gap:4px}
+.tab{flex:1;text-align:center;padding:10px;border-radius:10px 10px 0 0;font-weight:600;color:#a7f3d0;background:transparent;border:0;font-size:.95rem}
+.tab.on{background:#f8fafc;color:var(--g)}
+.wrap{padding:12px}
+.filters{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.filters .full{grid-column:1/-1}
+input,select{width:100%;padding:11px;border:1px solid var(--bd);border-radius:10px;font-size:1rem;background:#fff;color:var(--tx)}
+label{font-size:.72rem;text-transform:uppercase;font-weight:600;color:var(--mu);display:block;margin:10px 0 4px}
+.btn{border:0;border-radius:10px;padding:11px 14px;font-weight:600;font-size:.9rem;background:#f3f4f6;color:var(--tx)}
+.btn.p{background:var(--g);color:#fff}
+.btn.d{background:#fee2e2;color:#b91c1c}
+.row{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.row .btn{flex:1}
+.card{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:11px 12px;margin-bottom:8px}
+.card .t{display:flex;justify-content:space-between;gap:8px;font-weight:600}
+.card .s{font-size:.8rem;color:var(--mu);margin-top:3px}
+.badge{font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--g2);color:var(--g)}
+.badge.POS{background:#dbeafe;color:#1d4ed8}.badge.Bonifico{background:#fef3c7;color:#92400e}
+.tot{background:var(--g);color:#fff;border-radius:12px;padding:12px;margin-bottom:10px;display:flex;justify-content:space-between;font-weight:700}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--bd);border-radius:10px;overflow:hidden}
+th{background:#f3f4f6;color:var(--mu);font-size:.72rem;text-transform:uppercase;font-weight:600;text-align:left;padding:9px;border-bottom:1px solid var(--bd)}
+td{font-size:.88rem;padding:9px;border-bottom:1px solid #f1f5f9}
+td.r,th.r{text-align:right}
+.fab{position:fixed;right:18px;bottom:calc(env(safe-area-inset-bottom) + 18px);background:var(--g);color:#fff;border:0;border-radius:99px;padding:20px 28px;font-size:1.15rem;font-weight:700;box-shadow:0 6px 18px rgba(6,95,70,.45);z-index:10}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;z-index:20}
+.modal.on{display:flex}
+.sheet{background:#fff;width:100%;max-height:94vh;overflow:auto;border-radius:18px 18px 0 0;padding:14px 14px calc(env(safe-area-inset-bottom) + 14px)}
+.sheet h2{margin:0 0 4px;font-size:1.1rem}
+.pay{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pay button{padding:13px 4px;border:2px solid var(--bd);background:#fff;border-radius:10px;font-weight:600;font-size:.95rem;color:var(--tx)}
+.pay button.on{border-color:var(--g);background:var(--g2);color:var(--g)}
+.sug{position:relative}
+.sug .list{position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--bd);border-radius:10px;box-shadow:0 8px 20px rgba(0,0,0,.12);z-index:30;max-height:230px;overflow:auto;display:none}
+.sug .list div{padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:.9rem}
+.sug .list div:active{background:#f0fdf4}
+.empty{text-align:center;color:var(--mu);padding:30px 0}
+.hint{font-size:.78rem;color:var(--mu);margin-top:4px}
+.sum{display:flex;justify-content:space-between;font-size:1.05rem;font-weight:700;margin:12px 0 4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Vendite Fiere</h1>
+  <div class="tabs">
+    <button class="tab on" data-tab="vendite">Vendite</button>
+    <button class="tab" data-tab="resoconto">Resoconto</button>
+  </div>
+</header>
+
+<div class="wrap" id="vendite">
+  <div class="filters">
+    <div><input type="date" id="fFrom" onfocus="this.select()"></div>
+    <div><input type="date" id="fTo" onfocus="this.select()"></div>
+    <div><select id="fPay" onfocus="this.select()"><option value="">Tutti i pagamenti</option><option>Contanti</option><option>POS</option><option>Bonifico</option></select></div>
+    <div><input type="text" id="fQ" placeholder="Cerca codice/nome" onfocus="this.select()"></div>
+    <button class="btn full" id="fToday">Solo oggi</button>
+    <button class="btn full" id="fReset">Azzera filtri</button>
+  </div>
+  <div class="row">
+    <button class="btn p" id="shAll">PDF filtrate</button>
+    <button class="btn p" id="shEl">PDF POS + Bonifico</button>
+  </div>
+  <div class="tot"><span id="cnt">0 vendite</span><span id="totSum">€ 0,00</span></div>
+  <div id="list"></div>
+</div>
+
+<div class="wrap" id="resoconto" style="display:none">
+  <label>Giorno</label>
+  <input type="date" id="rDay" onfocus="this.select()">
+  <div style="height:12px"></div>
+  <table>
+    <thead><tr><th>Pagamento</th><th class="r">N.</th><th class="r">Totale</th></tr></thead>
+    <tbody id="rBody"></tbody>
+  </table>
+  <div class="sum"><span>Totale giorno</span><span id="rTot">€ 0,00</span></div>
+  <div class="row" style="margin-top:12px">
+    <button class="btn p" id="rShare">PDF resoconto del giorno</button>
+  </div>
+</div>
+
+<button class="fab" id="fab">+ Nuova vendita</button>
+
+<div class="modal" id="modal">
+  <div class="sheet" id="form">
+    <h2 id="mTitle">Nuova vendita</h2>
+    <label>Codice</label>
+    <div class="sug">
+      <input type="text" id="mCode" inputmode="numeric" autocomplete="off" onfocus="this.select()">
+      <div class="list" id="sugList"></div>
+    </div>
+    <label>Nome articolo</label>
+    <input type="text" id="mName" autocomplete="off" onfocus="this.select()">
+    <div class="hint" id="mHint"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><label>Quantità</label><input type="number" id="mQty" min="1" step="1" value="1" inputmode="numeric" onfocus="this.select()"></div>
+      <div><label>Prezzo (€)</label><input type="number" id="mPrice" min="0" step="0.01" inputmode="decimal" onfocus="this.select()"></div>
+    </div>
+    <label>Pagamento</label>
+    <div class="pay" id="mPay">
+      <button type="button" data-p="Contanti" class="on">Contanti</button>
+      <button type="button" data-p="POS">POS</button>
+      <button type="button" data-p="Bonifico">Bonifico</button>
+    </div>
+    <div class="sum"><span>Totale</span><span id="mTot">€ 0,00</span></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" id="mCancel">Annulla</button>
+      <button class="btn d" id="mDel" style="display:none">Elimina</button>
+      <button class="btn p" id="mPdf" style="display:none">PDF</button>
+      <button class="btn p" id="mSave" style="flex:2">Salva</button>
+    </div>
+  </div>
+</div>
+
+<script src="jspdf.umd.min.js"></script>
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const eur=n=>'€ '+Number(n||0).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2});
+const PAYS=['Contanti','POS','Bonifico'];
+const ymd=d=>{const z=new Date(d);return z.getFullYear()+'-'+String(z.getMonth()+1).padStart(2,'0')+'-'+String(z.getDate()).padStart(2,'0')};
+const dt=iso=>new Date(iso).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+let inv=[],invMap={},sales=[];
+try{sales=JSON.parse(localStorage.getItem('sales')||'[]')}catch(e){sales=[]}
+const save=()=>{try{localStorage.setItem('sales',JSON.stringify(sales))}catch(e){}};
+fetch('inventory.json').then(r=>r.json()).then(d=>{inv=d;d.forEach(i=>invMap[i.c]=i)}).catch(()=>{});
+
+// tabs
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===b));
+  $('vendite').style.display=b.dataset.tab==='vendite'?'':'none';
+  $('resoconto').style.display=b.dataset.tab==='resoconto'?'':'none';
+  render();
+});
+
+// filters
+['fFrom','fTo','fPay','fQ'].forEach(id=>{$(id).oninput=render;$(id).onchange=render});
+$('fToday').onclick=()=>{$('fFrom').value=$('fTo').value=ymd(new Date());render()};
+$('fReset').onclick=()=>{$('fFrom').value=$('fTo').value=$('fQ').value=$('fPay').value='';render()};
+function filtered(){
+  const f=$('fFrom').value,t=$('fTo').value,p=$('fPay').value,q=$('fQ').value.trim().toLowerCase();
+  return sales.filter(s=>{
+    const d=ymd(s.ts);
+    return (!f||d>=f)&&(!t||d<=t)&&(!p||s.pay===p)&&(!q||s.code.toLowerCase().includes(q)||s.name.toLowerCase().includes(q));
+  }).sort((a,b)=>b.ts.localeCompare(a.ts));
+}
+const tot=s=>s.qty*s.price;
+function render(){
+  const l=filtered();
+  $('cnt').textContent=l.length+(l.length===1?' vendita':' vendite');
+  $('totSum').textContent=eur(l.reduce((a,s)=>a+tot(s),0));
+  $('list').innerHTML=l.length?l.map(s=>`<div class="card" data-id="${s.id}"><div class="t"><span>${esc(s.name||'(senza nome)')}</span><span>${eur(tot(s))}</span></div><div class="s">${dt(s.ts)} · cod. ${esc(s.code||'-')} · ${s.qty} × ${eur(s.price)} · <span class="badge ${s.pay}">${s.pay}</span></div></div>`).join(''):'<div class="empty">Nessuna vendita</div>';
+  $('list').querySelectorAll('.card').forEach(c=>c.onclick=()=>openForm(c.dataset.id));
+  // resoconto
+  if(!$('rDay').value)$('rDay').value=ymd(new Date());
+  const day=sales.filter(s=>ymd(s.ts)===$('rDay').value);
+  $('rBody').innerHTML=PAYS.map(p=>{const x=day.filter(s=>s.pay===p);return `<tr><td>${p}</td><td class="r">${x.length}</td><td class="r">${eur(x.reduce((a,s)=>a+tot(s),0))}</td></tr>`}).join('');
+  $('rTot').textContent=eur(day.reduce((a,s)=>a+tot(s),0));
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+$('rDay').oninput=render;
+
+// form
+let editId=null,pay='Contanti',autoName=false,autoPrice=false;
+function setPay(p){pay=p;document.querySelectorAll('#mPay button').forEach(b=>b.classList.toggle('on',b.dataset.p===p))}
+document.querySelectorAll('#mPay button').forEach(b=>b.onclick=()=>setPay(b.dataset.p));
+function calc(){$('mTot').textContent=eur((+$('mQty').value||0)*(+$('mPrice').value||0))}
+['mQty','mPrice'].forEach(id=>$(id).oninput=()=>{if(id==='mPrice')autoPrice=false;calc()});
+$('mName').oninput=()=>{autoName=false};
+function applyCode(){
+  const c=$('mCode').value.trim(),it=invMap[c];
+  if(it){$('mName').value=it.n;$('mPrice').value=it.p;autoName=autoPrice=true;$('mHint').textContent='Da magazzino (modificabile)'}
+  else{
+    if(autoName)$('mName').value='';
+    if(autoPrice)$('mPrice').value='';
+    autoName=autoPrice=false;
+    $('mHint').textContent=c?'Codice non in magazzino: inserisci nome e prezzo':'';
+  }
+  calc();
+}
+function showSug(){
+  const q=$('mCode').value.trim().toLowerCase(),box=$('sugList');
+  if(!q){box.style.display='none';return}
+  const m=inv.filter(i=>i.c.startsWith(q)||i.n.toLowerCase().includes(q)).slice(0,8);
+  if(!m.length||(m.length===1&&m[0].c===q)){box.style.display='none';return}
+  box.innerHTML=m.map(i=>`<div data-c="${i.c}"><b>${i.c}</b> · ${esc(i.n)} · ${eur(i.p)}</div>`).join('');
+  box.style.display='block';
+  box.querySelectorAll('div').forEach(d=>d.onmousedown=d.ontouchstart=e=>{e.preventDefault();$('mCode').value=d.dataset.c;box.style.display='none';applyCode();$('mQty').focus()});
+}
+$('mCode').oninput=()=>{applyCode();showSug()};
+$('mCode').onblur=()=>setTimeout(()=>$('sugList').style.display='none',150);
+function openForm(id){
+  editId=id||null;
+  const s=id?sales.find(x=>x.id===id):null;
+  $('mTitle').textContent=s?'Modifica vendita':'Nuova vendita';
+  $('mCode').value=s?s.code:'';
+  $('mName').value=s?s.name:'';
+  $('mQty').value=s?s.qty:1;
+  $('mPrice').value=s?s.price:'';
+  autoName=autoPrice=false;
+  $('mHint').textContent='';
+  setPay(s?s.pay:'Contanti');
+  $('mDel').style.display=s?'':'none';
+  $('mPdf').style.display=s?'':'none';
+  calc();
+  $('modal').classList.add('on');
+  setTimeout(()=>{$('mCode').focus()},60);
+}
+function closeForm(){$('modal').classList.remove('on');$('sugList').style.display='none'}
+$('fab').onclick=()=>openForm();
+$('mCancel').onclick=closeForm;
+$('modal').onclick=e=>{if(e.target===$('modal'))closeForm()};
+function commit(){
+  const code=$('mCode').value.trim(),name=$('mName').value.trim(),qty=+$('mQty').value,price=+$('mPrice').value;
+  if(!code&&!name){alert('Inserisci codice o nome');return}
+  if(!(qty>0)){alert('Quantità non valida');$('mQty').focus();return}
+  if($('mPrice').value===''||price<0){alert('Inserisci il prezzo');$('mPrice').focus();return}
+  if(editId){const s=sales.find(x=>x.id===editId);Object.assign(s,{code,name,qty,price,pay})}
+  else sales.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),ts:new Date().toISOString(),code,name,qty,price,pay});
+  save();closeForm();render();
+}
+$('mSave').onclick=commit;
+$('form').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('sugList').style.display='none';commit()}});
+$('mDel').onclick=()=>{if(confirm('Eliminare la vendita?')){sales=sales.filter(x=>x.id!==editId);save();closeForm();render()}};
+$('mPdf').onclick=()=>{const s=sales.find(x=>x.id===editId);if(s)sharePdf('Vendita '+(s.code||''),[s],'vendita_'+(s.code||s.id))};
+
+// pdf
+async function sharePdf(title,list,fname,sub){
+  if(!list.length){alert('Nessuna vendita da condividere');return}
+  if(!window.jspdf){alert('PDF non disponibile');return}
+  const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
+  const W=210,M=10;let y=16;
+  const cols=[M,M+30,M+44,M+112,M+126,M+150];
+  const head=()=>{doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setFillColor(243,244,246);doc.rect(M,y-4,W-2*M,6,'F');
+    ['Data/ora','Cod.','Articolo','Q.tà','Prezzo','Totale / Pag.'].forEach((h,i)=>doc.text(h,cols[i],y));y+=7;doc.setFont('helvetica','normal')};
+  doc.setFont('helvetica','bold');doc.setFontSize(14);doc.text('Dal Brocante · '+title,M,y);y+=6;
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text(sub||('Generato il '+dt(new Date().toISOString())),M,y);y+=8;
+  head();
+  doc.setFontSize(8);
+  list.slice().sort((a,b)=>a.ts.localeCompare(b.ts)).forEach(s=>{
+    const nm=doc.splitTextToSize(s.name||'',64),h=Math.max(1,nm.length)*4;
+    if(y+h>282){doc.addPage();y=16;head();doc.setFontSize(8)}
+    doc.text(dt(s.ts),cols[0],y);doc.text(String(s.code||'-'),cols[1],y);doc.text(nm,cols[2],y);
+    doc.text(String(s.qty),cols[3],y);doc.text(eur(s.price),cols[4],y);doc.text(eur(tot(s))+' '+s.pay,cols[5],y);
+    y+=h+1.5;doc.setDrawColor(230);doc.line(M,y-3,W-M,y-3);
+  });
+  if(y>262){doc.addPage();y=16}
+  y+=4;doc.setFont('helvetica','bold');doc.setFontSize(10);
+  PAYS.forEach(p=>{const x=list.filter(s=>s.pay===p);if(x.length){doc.text(p+' ('+x.length+')',M,y);doc.text(eur(x.reduce((a,s)=>a+tot(s),0)),W-M,y,{align:'right'});y+=6}});
+  doc.setFontSize(12);doc.text('TOTALE',M,y+2);doc.text(eur(list.reduce((a,s)=>a+tot(s),0)),W-M,y+2,{align:'right'});
+  const name=(fname||'vendite')+'_'+ymd(new Date())+'.pdf';
+  const P=window.Capacitor&&window.Capacitor.Plugins;
+  if(P&&P.Filesystem&&P.Share){
+    try{
+      const data=doc.output('datauristring').split(',')[1];
+      const r=await P.Filesystem.writeFile({path:name,data,directory:'CACHE'});
+      await P.Share.share({title:name,url:r.uri,dialogTitle:'Condividi PDF'});
+    }catch(e){if(!/cancel/i.test(String(e&&e.message||e)))alert('Errore condivisione: '+(e&&e.message||e))}
+  }else doc.save(name);
+}
+$('shAll').onclick=()=>{
+  const f=$('fFrom').value,t=$('fTo').value;
+  sharePdf('Vendite',filtered(),'vendite',(f||t)?('Periodo: '+(f||'…')+' → '+(t||'…')):'Tutte le vendite filtrate');
+};
+$('shEl').onclick=()=>sharePdf('Vendite POS e Bonifico',filtered().filter(s=>s.pay==='POS'||s.pay==='Bonifico'),'pos_bonifico','Solo pagamenti POS e Bonifico (filtri attivi applicati)');
+$('rShare').onclick=()=>{const d=$('rDay').value;sharePdf('Resoconto '+d,sales.filter(s=>ymd(s.ts)===d),'resoconto','Resoconto giornaliero del '+d)};
+
+render();
+})();
+</script>
+</body>
+</html>
