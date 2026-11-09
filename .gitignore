@@ -3,3 +3,4 @@ android
 www/jspdf.umd.min.js
 www/pdf.min.js
 www/pdf.worker.min.js
+www/xlsx.full.min.js

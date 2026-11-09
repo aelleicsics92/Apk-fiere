@@ -145,8 +145,8 @@ td.r,th.r{text-align:right}
 </div>
 
 <div class="view" id="magazzino" style="display:none">
-  <div class="inv"><h3>COMPRAVENDITA</h3><p id="iCompInfo"></p><button class="btn p" style="width:100%" data-imp="comp">Aggiorna da PDF</button></div>
-  <div class="inv"><h3>CONTOVENDITA</h3><p id="iContoInfo"></p><button class="btn p" style="width:100%" data-imp="conto">Aggiorna da PDF</button></div>
+  <div class="inv"><h3>COMPRAVENDITA</h3><p id="iCompInfo"></p><button class="btn p" style="width:100%" data-imp="comp">Aggiorna da file (PDF / Excel)</button></div>
+  <div class="inv"><h3>CONTOVENDITA</h3><p id="iContoInfo"></p><button class="btn p" style="width:100%" data-imp="conto">Aggiorna da file (PDF / Excel)</button></div>
   <div class="hint">L'aggiornamento aggiunge solo i codici nuovi: nulla viene cancellato e i doppioni vengono ignorati.</div>
   <div class="inv" style="margin-top:14px"><h3>☁ Sincronizzazione</h3><p id="syncInfo">Non configurata</p>
     <label>Codice configurazione (da un altro telefono)</label>
@@ -156,7 +156,10 @@ td.r,th.r{text-align:right}
     <label>Chiave app</label><input type="text" id="sApp" autocomplete="off" onfocus="this.select()">
     <div class="row" style="margin-top:12px"><button class="btn p" id="sSave">Salva e sincronizza</button><button class="btn" id="sShare">Condividi codice</button></div>
   </div>
-  <input type="file" id="impFile" accept="application/pdf,.pdf" style="display:none">
+  <div class="inv"><h3>💾 Backup dati</h3><p>Salva vendite e magazzini in un file, o ripristinali da un file salvato.</p>
+    <div class="row"><button class="btn p" id="bkExport">Esporta backup</button><button class="btn" id="bkImport">Importa backup</button></div></div>
+  <input type="file" id="bkFile" accept=".json,application/json" style="display:none">
+  <input type="file" id="impFile" accept=".pdf,.xls,.xlsx,.csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" style="display:none">
 </div>
 
 <button class="fab" id="fab"><span class="pl">+</span>Nuova vendita</button>
@@ -280,6 +283,10 @@ async function init(){
     try{const d=await (await fetch('inventory.json')).json();inv.comp={items:d,upd:new Date().toISOString()}}catch(e){}
   }
   sales.forEach(s=>{if(!s.u)s.u=Date.parse(s.ts)||Date.now()});
+  if(!inv.conto.items.length&&!S.contoSeeded){
+    try{const d=await (await fetch('inventory_conto.json')).json();if(d.length){inv.conto={items:d,upd:new Date().toISOString()};S.invAll=true}}catch(e){}
+    S.contoSeeded=true;saveSync();
+  }
   lsSet('sales2',sales);lsSet('inv2',inv);rebuild();render();renderInv();setStatus('ok');sync.run();
 }
 
@@ -349,24 +356,56 @@ function renderInv(){
 }
 let impSec=null;
 document.querySelectorAll('[data-imp]').forEach(b=>b.onclick=()=>{impSec=b.dataset.imp;$('impFile').click()});
+const loadXlsx=()=>window.XLSX?Promise.resolve():new Promise((res,rej)=>{const sc=document.createElement('script');sc.src='xlsx.full.min.js';sc.onload=res;sc.onerror=rej;document.head.appendChild(sc)});
+function parseSheet(rows){
+  const A={c:['item_code','codice','cod','code'],n:['item_name','nome articolo','nome','descrizione','articolo'],p:['selling_price','prezzo vendita','prezzo','price']};
+  let hi=-1,ix={};
+  for(let r=0;r<Math.min(rows.length,15)&&hi<0;r++){
+    const h=(rows[r]||[]).map(x=>String(x).trim().toLowerCase());
+    const f=k=>h.findIndex(x=>A[k].includes(x));
+    const c=f('c'),n=f('n'),p=f('p');
+    if(c>=0&&n>=0&&p>=0){hi=r;ix={c,n,p}}
+  }
+  if(hi<0)return null;
+  const out=[],seen=new Set();
+  for(let r=hi+1;r<rows.length;r++){
+    const row=rows[r]||[];let c=row[ix.c];
+    if(c===undefined||c==='')continue;
+    c=typeof c==='number'?String(Math.round(c)):String(c).trim();
+    if(!c||seen.has(c))continue;
+    const n=String(row[ix.n]==null?'':row[ix.n]).replace(/\s+/g,' ').trim();
+    let pr=row[ix.p];if(typeof pr==='string')pr=parseFloat(pr.replace(/\./g,'').replace(',','.'));
+    if(!isFinite(pr))continue;
+    seen.add(c);out.push({c,n,p:pr});
+  }
+  return out;
+}
 $('impFile').onchange=async e=>{
   const file=e.target.files[0];if(!file||!impSec)return;
   const sec=impSec;
-  await busy('Lettura PDF…');
+  await busy('Lettura file…');
   try{
-    pdfjsLib.GlobalWorkerOptions.workerSrc='pdf.worker.min.js';
-    const pdf=await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
-    const all=[];
-    for(let n=1;n<=pdf.numPages;n++){const tc=await (await pdf.getPage(n)).getTextContent();tc.items.forEach(i=>all.push({s:i.str,x:i.transform[4]}))}
-    const parsed=parseInv(all);
-    if(!parsed.length){toast('Nessun articolo trovato nel PDF')}
+    let parsed;
+    if(/\.pdf$/i.test(file.name)||file.type==='application/pdf'){
+      pdfjsLib.GlobalWorkerOptions.workerSrc='pdf.worker.min.js';
+      const pdf=await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+      const all=[];
+      for(let n=1;n<=pdf.numPages;n++){const tc=await (await pdf.getPage(n)).getTextContent();tc.items.forEach(i=>all.push({s:i.str,x:i.transform[4]}))}
+      parsed=parseInv(all);
+    }else{
+      await loadXlsx();
+      const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});
+      parsed=parseSheet(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true}));
+      if(parsed===null){unbusy();toast('Colonne non riconosciute (servono codice, nome, prezzo vendita)');e.target.value='';return}
+    }
+    if(!parsed.length){toast('Nessun articolo trovato nel file')}
     else{
       const have=new Set(inv[sec].items.map(i=>i.c));let add=0,dup=0;
       parsed.forEach(i=>{if(have.has(i.c))dup++;else{have.add(i.c);inv[sec].items.push(i);S.invQ.push({sec,code:i.c,name:i.n,price:i.p});add++}});
       inv[sec].upd=new Date().toISOString();saveInv();
       toast(SEC[sec]+': '+add+' nuovi, '+dup+' doppioni ignorati');
     }
-  }catch(err){toast('Errore lettura PDF')}
+  }catch(err){toast('Errore lettura file')}
   unbusy();e.target.value='';
 };
 function parseInv(strs){
@@ -558,6 +597,36 @@ $('sShare').onclick=async()=>{
   const code=btoa(unescape(encodeURIComponent(JSON.stringify({u:S.url,k:S.key,a:S.app}))));
   const sh=P().Share;
   try{if(sh)await sh.share({title:'Codice configurazione Vendite Fiere',text:code});else prompt('Codice',code)}catch(e){}
+};
+$('bkExport').onclick=async()=>{
+  const data=JSON.stringify({v:1,sales,inv});
+  const name='backup_vendite_fiere_'+ymd(new Date())+'.json';
+  const pl=P();
+  try{
+    if(pl.Filesystem&&pl.Share){
+      const r=await pl.Filesystem.writeFile({path:name,data,directory:'CACHE',encoding:'utf8'});
+      await pl.Share.share({title:name,url:r.uri,dialogTitle:'Salva backup'});
+    }else{
+      const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));a.download=name;a.click();
+    }
+  }catch(e){if(!/cancel/i.test(String(e&&e.message||e)))toast('Errore backup')}
+};
+$('bkImport').onclick=()=>$('bkFile').click();
+$('bkFile').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{
+    const b=JSON.parse(await f.text());
+    let ns=0,ni=0;
+    const ids=new Set(sales.map(x=>x.id));
+    (b.sales||[]).forEach(x=>{if(x&&x.id&&Array.isArray(x.items)&&!ids.has(x.id)){ids.add(x.id);if(!x.u)x.u=Date.parse(x.ts)||Date.now();sales.push(x);S.dirty[x.id]={t:'u',u:x.u};ns++}});
+    ['comp','conto'].forEach(sec=>{
+      const have=new Set(inv[sec].items.map(i=>i.c));
+      ((b.inv&&b.inv[sec]&&b.inv[sec].items)||[]).forEach(i=>{if(i&&i.c&&!have.has(i.c)){have.add(i.c);inv[sec].items.push(i);S.invQ.push({sec,code:i.c,name:i.n,price:i.p});ni++}});
+    });
+    lsSet('sales2',sales);lsSet('inv2',inv);rebuild();saveSync();backup();render();renderInv();schedSync();
+    toast('Ripristino: '+ns+' vendite, '+ni+' articoli');
+  }catch(err){toast('File di backup non valido')}
+  e.target.value='';
 };
 loadCfg();
 init();

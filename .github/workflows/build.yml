@@ -22,13 +22,16 @@ jobs:
           cp node_modules/jspdf/dist/jspdf.umd.min.js www/
           cp node_modules/pdfjs-dist/legacy/build/pdf.min.js www/
           cp node_modules/pdfjs-dist/legacy/build/pdf.worker.min.js www/
+          cp node_modules/xlsx/dist/xlsx.full.min.js www/
           mkdir -p ~/.android && cp keystore/debug.keystore ~/.android/debug.keystore
       - run: npx cap add android
+      - run: python3 scripts/patch_gradle.py
       - run: npx capacitor-assets generate --android --iconBackgroundColor '#4F46E5' --iconBackgroundColorDark '#4338CA'
       - run: npx cap sync android
       - name: Build debug APK
         run: cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
       - run: cp android/app/build/outputs/apk/debug/app-debug.apk vendite-fiere.apk
+      - run: keytool -printcert -jarfile vendite-fiere.apk | grep SHA256
       - uses: actions/upload-artifact@v4
         with:
           name: vendite-fiere
